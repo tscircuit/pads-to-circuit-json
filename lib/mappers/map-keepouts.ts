@@ -11,7 +11,11 @@ import {
   createSkippedDiagnostic,
 } from "../internal/diagnostics"
 import { getCircuitJsonLayer, layerWasDefaultedToTop } from "../internal/layers"
-import { getAxisAlignedRectangle } from "../internal/polygon"
+import { pathHasArcs, pathToPolylinePoints } from "../internal/path-to-polyline"
+import {
+  getAxisAlignedRectangle,
+  withoutRepeatedClosingPoint,
+} from "../internal/polygon"
 
 const addRestrictionsDiagnostic = ({
   context,
@@ -50,20 +54,45 @@ const addRestrictionsDiagnostic = ({
   )
 }
 
+const addKeepoutLayerDiagnostics = ({
+  context,
+  path,
+  keepoutId,
+}: {
+  context: ConversionContext
+  path: ConversionContext["geometry"]["paths"][number]
+  keepoutId: string
+}): void => {
+  if (layerWasDefaultedToTop(path)) {
+    context.diagnostics.push(
+      createInferredDiagnostic({
+        code: "circuit-json-keepout-layer-defaulted-to-top",
+        message:
+          "Mapped a PADS keepout with normalized layer 0 to the top layer; verify the original line-section level",
+        entity: path,
+        circuitJsonIds: [keepoutId],
+        fallbackSource: context.documentSource,
+      }),
+    )
+  }
+  addRestrictionsDiagnostic({
+    context,
+    entity: path,
+    circuitJsonId: keepoutId,
+  })
+}
+
 export const mapKeepouts = (context: ConversionContext): void => {
   for (const [index, path] of context.geometry.paths.entries()) {
     if (path.kind !== "keepout") continue
     context.handledPaths.add(path)
-    const rectangle = path.closed
-      ? getAxisAlignedRectangle(path.points)
-      : undefined
     const layer = getCircuitJsonLayer(path.layer, context.geometry.layerCount)
-    if (!rectangle || !layer) {
+    if (!layer) {
       context.diagnostics.push(
         createSkippedDiagnostic({
           code: "circuit-json-keepout-path-not-exactly-representable",
           message:
-            "Skipped a keepout path because Circuit JSON keepouts currently require an axis-aligned rectangle and a mapped layer",
+            "Skipped a keepout path because its PADS layer has no Circuit JSON mapping",
           entity: path,
           fallbackSource: context.documentSource,
         }),
@@ -76,34 +105,63 @@ export const mapKeepouts = (context: ConversionContext): void => {
       path.source?.sourceId,
       index,
     )
+    const rectangle = path.closed
+      ? getAxisAlignedRectangle(path.points)
+      : undefined
+
+    if (rectangle) {
+      context.circuitJson.push({
+        type: "pcb_keepout",
+        pcb_keepout_id: keepoutId,
+        shape: "rect",
+        center: toCircuitJsonPoint(rectangle.center),
+        width: nanometersToMillimeters(rectangle.width),
+        height: nanometersToMillimeters(rectangle.height),
+        layers: [layer],
+        description: path.name,
+      } as AnyCircuitElement)
+      context.mappedEntities.add(path)
+      addKeepoutLayerDiagnostics({ context, path, keepoutId })
+      continue
+    }
+
+    const outline = withoutRepeatedClosingPoint(pathToPolylinePoints(path))
+    if (!path.closed || outline.length < 3) {
+      context.diagnostics.push(
+        createSkippedDiagnostic({
+          code: "circuit-json-keepout-path-not-exactly-representable",
+          message:
+            "Skipped a keepout path because it is open or has fewer than three vertices",
+          entity: path,
+          fallbackSource: context.documentSource,
+        }),
+      )
+      continue
+    }
+
     context.circuitJson.push({
       type: "pcb_keepout",
       pcb_keepout_id: keepoutId,
-      shape: "rect",
-      center: toCircuitJsonPoint(rectangle.center),
-      width: nanometersToMillimeters(rectangle.width),
-      height: nanometersToMillimeters(rectangle.height),
+      shape: "outline",
+      outline: outline.map(toCircuitJsonPoint),
+      stroke_width: nanometersToMillimeters(path.width),
       layers: [layer],
       description: path.name,
     } as AnyCircuitElement)
     context.mappedEntities.add(path)
-    if (layerWasDefaultedToTop(path)) {
+    if (pathHasArcs(path)) {
       context.diagnostics.push(
-        createInferredDiagnostic({
-          code: "circuit-json-keepout-layer-defaulted-to-top",
+        createApproximationDiagnostic({
+          code: "circuit-json-keepout-arcs-segmented",
           message:
-            "Mapped a PADS keepout with normalized layer 0 to the top layer; verify the original line-section level",
+            "Segmented circular keepout arcs into Circuit JSON outline edges at no more than five degrees per segment",
           entity: path,
           circuitJsonIds: [keepoutId],
           fallbackSource: context.documentSource,
         }),
       )
     }
-    addRestrictionsDiagnostic({
-      context,
-      entity: path,
-      circuitJsonId: keepoutId,
-    })
+    addKeepoutLayerDiagnostics({ context, path, keepoutId })
   }
 
   for (const [index, circle] of context.geometry.circles.entries()) {
