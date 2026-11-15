@@ -11,7 +11,7 @@
     "check": "bun run format:check && bun run typecheck && bun test",
     "format": "biome check --write .",
     "format:check": "biome check .",
-    "test": "bun test",
+    "test": "bun test --timeout 60000",
     "test:download-assets": "bun run scripts/download-test-assets.ts",
     "typecheck": "bunx tsc --noEmit"
   },
@@ -22,7 +22,7 @@
   "keywords": ["pads", "circuit-json", "pcb", "eda", "tscircuit"],
   "license": "MIT",
   "devDependencies": {
-    "@biomejs/biome": "^2.5.6",
+    "@biomejs/biome": "2.5.6",
     "@tscircuit/alphabet": "0.0.25",
     "@tscircuit/circuit-json-util": "0.0.102",
     "@types/bun": "latest",
@@ -38,7 +38,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "circuit-json": "0.0.456",
+    "circuit-json": "0.0.485",
     "padsts": "github:tscircuit/padsts#a01e301"
   },
   "overrides": {

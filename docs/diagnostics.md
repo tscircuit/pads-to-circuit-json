@@ -46,7 +46,8 @@ adds the codes below.
 | `circuit-json-copper-layer-defaulted-to-top` | Normalized layer 0 was rendered as top copper. Verify the original PADS line-section level before fabrication. |
 | `circuit-json-thermal-relief-ground-plane-unavailable` | A decoded RT/ST thermal relief was retained in mapping coverage but not emitted because Circuit JSON requires a verified `pcb_ground_plane` owner. Decode the PADS plane association before emitting `pcb_thermal_spoke`. |
 | `circuit-json-antipad-not-represented` | A decoded RA/SA antipad was retained in mapping coverage but not emitted because Circuit JSON has no standalone antipad entity and the owning plane is not verified. |
-| `circuit-json-keepout-path-not-exactly-representable` | The keepout is not an axis-aligned rectangle on a mapped layer. Circuit JSON currently lacks arbitrary keepout polygons. |
+| `circuit-json-keepout-path-not-exactly-representable` | The keepout is open, has fewer than three vertices, or has no mapped Circuit JSON layer. Closed non-rectangular polygons are emitted as `shape: "outline"` keepouts. |
+| `circuit-json-keepout-arcs-segmented` | Keepout arcs became outline edges at 5° or less. Inspect the polygon before using it as a fabrication keepout. |
 | `circuit-json-keepout-circle-layer-unavailable` | A circular keepout has no target layer. Repair or extend the layer mapping. |
 | `circuit-json-keepout-restrictions-approximated` | PADS route/via/placement restrictions collapsed to a general layer keepout. Read the source restriction from the diagnostic. |
 | `circuit-json-keepout-restriction-scope-unavailable` | `padsts` did not expose the restriction category, so the adapter inferred a general layer keepout. Verify the source intent. |
